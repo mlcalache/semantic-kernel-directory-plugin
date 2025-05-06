@@ -1,123 +1,115 @@
-// using Microsoft.Extensions.DependencyInjection;
-// using Microsoft.Extensions.Logging;
-// using Microsoft.SemanticKernel;
-// using Microsoft.Extensions.Configuration;
-// using Microsoft.Extensions.Logging.Abstractions;
-// using Kernel = Microsoft.SemanticKernel.Kernel;
-
-// // Inject your logger 
-// // see Microsoft.Extensions.Logging.ILogger @ https://learn.microsoft.com/dotnet/core/extensions/logging
-// ILoggerFactory myLoggerFactory = NullLoggerFactory.Instance;
-
-// var builder = Kernel.CreateBuilder();
-// builder.Services.AddSingleton(myLoggerFactory);
-
-// var kernel = builder.Build();
-
-// // Load configuration from secrets (for your Azure OpenAI keys)
-// var configuration = new ConfigurationBuilder()
-//     .SetBasePath(Directory.GetCurrentDirectory())
-//     .AddUserSecrets<Program>()
-//     .Build();
-
-// string? modelId = configuration["SemanticKernel:ModelId"];
-// string? endpoint = configuration["SemanticKernel:Endpoint"];
-// string? apiKey = configuration["SemanticKernel:ApiKey"];
-
-// var kernelBuilder = Kernel.CreateBuilder();
-
-// kernelBuilder.AddAzureOpenAIChatCompletion(modelId, endpoint, apiKey);
-
-// // FunPlugin directory path
-// var funPluginDirectoryPath = Path.Combine(Directory.GetCurrentDirectory(), "Plugins");
-// // var funPluginDirectoryPath = Path.Combine("Plugins", "FunnyJoke");
-
-// // Load the FunPlugin from the Plugins Directory
-// var funPluginFunctions = kernel.ImportPluginFromPromptDirectory(funPluginDirectoryPath);
-
-// // Construct arguments
-// var arguments = new KernelArguments() { ["input"] = "time travel to dinosaur age" };
-
-// // Run the Function called Joke
-// var result = await kernel.InvokeAsync(funPluginFunctions["FunnyJoke"], arguments);
-
-// // Return the result to the Notebook
-// Console.WriteLine(result);
-
-
-
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Kernel = Microsoft.SemanticKernel.Kernel;
-using System;
-using System.IO;
-using Microsoft.SemanticKernel.TextGeneration;
 
-// Load configuration
-var configuration = new ConfigurationBuilder()
-    .SetBasePath(Directory.GetCurrentDirectory())
-    .AddUserSecrets<Program>()
-    .Build();
-
-string? modelId = configuration["SemanticKernel:ModelId"];
-string? endpoint = configuration["SemanticKernel:Endpoint"];
-string? apiKey = configuration["SemanticKernel:ApiKey"];
-
-if (string.IsNullOrWhiteSpace(modelId) || string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(apiKey))
+public class Program(string[] args)
 {
-    Console.WriteLine("❌ Missing required Azure OpenAI configuration.");
-    return;
-}
+    public static async Task Main(string[] args)
+    {
+        // Inject your logger 
+        // see Microsoft.Extensions.Logging.ILogger @ https://learn.microsoft.com/dotnet/core/extensions/logging
+        ILoggerFactory myLoggerFactory = NullLoggerFactory.Instance;
 
-// Logger (optional, for logging)
-ILoggerFactory loggerFactory = NullLoggerFactory.Instance;
+        // Load configuration from secrets (for your Azure OpenAI keys)
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddUserSecrets<Program>()
+            .Build();
 
-// Kernel builder setup (single builder!)
-var builder = Kernel.CreateBuilder();
+        string? modelId = configuration["SemanticKernel:ModelId"];
+        string? endpoint = configuration["SemanticKernel:Endpoint"];
+        string? apiKey = configuration["SemanticKernel:ApiKey"];
 
-// Setup the Azure OpenAI text generation service
-builder.AddAzureOpenAIChatCompletion(modelId, endpoint, apiKey); // Ensure this line is added
+        var kernel = Kernel.CreateBuilder()
+            .AddAzureOpenAIChatCompletion(modelId, endpoint, apiKey)
+            .Build();
 
-// Setup DI for kernel and logger
-builder.Services.AddSingleton<ILoggerFactory>(loggerFactory);
+        var funPluginDirectoryPath = Path.Combine(AppContext.BaseDirectory, "Plugins", "FunPlugin");
 
-// Build kernel
-var kernel = builder.Build();
+        CreateFileBasedPluginTemplate(funPluginDirectoryPath);
 
-// Plugin path
-var pluginPath = Path.Combine(Directory.GetCurrentDirectory(), "Plugins");
-var plugin = kernel.ImportPluginFromPromptDirectory(pluginPath);
+        var funPlugin = kernel.ImportPluginFromPromptDirectory(funPluginDirectoryPath, "FunPlugin");
 
-// Confirm plugin functions
-Console.WriteLine("Loaded plugin functions:");
-foreach (var f in plugin)
-{
-    Console.WriteLine($"- {f.Name}");
-}
+                // Invoke the plugin with a prompt
+        var result = await kernel.InvokeAsync(funPlugin["Joke"], new()
+        {
+            ["input"] = "Why did the chicken cross the road?",
+            ["style"] = "dad joke"
+        });
 
-// Check if the function exists
-if (!plugin.TryGetFunction("FunnyJoke", out var jokeFunction))
-{
-    Console.WriteLine("❌ Could not find function 'FunnyJoke' in plugin.");
-    return;
-}
+        Console.WriteLine(result.GetValue<string>());
+    }
 
-// Construct arguments for the function
-var arguments = new KernelArguments { ["input"] = "time travel to dinosaur age" };
+    private static void CreateFileBasedPluginTemplate(string pluginRootDirectory)
+    {
+        // Create the sub-directory for the plugin function "Joke"
+        var pluginRelativeDirectory = Path.Combine(pluginRootDirectory, "Joke");
 
-// Execute the function
-try
-{
-    var result = await jokeFunction.InvokeAsync(kernel, arguments);
-    Console.WriteLine("✅ Result:");
-    Console.WriteLine(result);
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"❌ Error invoking function: {ex.Message}");
+        const string ConfigJsonFileContent =
+            """
+            {
+              "schema": 1,
+              "description": "Generate a funny joke",
+              "execution_settings": {
+                "default": {
+                  "max_tokens": 1000,
+                  "temperature": 0.9,
+                  "top_p": 0.0,
+                  "presence_penalty": 0.0,
+                  "frequency_penalty": 0.0
+                }
+              },
+              "input_variables": [
+                {
+                  "name": "input",
+                  "description": "Joke subject",
+                  "default": ""
+                },
+                {
+                  "name": "style",
+                  "description": "Give a hint about the desired joke style",
+                  "default": ""
+                }
+              ]
+            }
+            """;
+
+        const string SkPromptFileContent =
+            """
+            WRITE EXACTLY ONE JOKE or HUMOROUS STORY ABOUT THE TOPIC BELOW
+            JOKE MUST BE:
+            - G RATED
+            - WORKPLACE/FAMILY SAFE
+            NO SEXISM, RACISM OR OTHER BIAS/BIGOTRY
+            BE CREATIVE AND FUNNY. I WANT TO LAUGH.
+            Incorporate the style suggestion, if provided: {{$style}}
+            +++++
+            {{$input}}
+            +++++
+            """;
+
+        // Create the directory structure
+        if (!Directory.Exists(pluginRelativeDirectory))
+        {
+            Directory.CreateDirectory(pluginRelativeDirectory);
+        }
+
+        // Create the config.json file if not exists
+        var configJsonFilePath = Path.Combine(pluginRelativeDirectory, "config.json");
+        if (!File.Exists(configJsonFilePath))
+        {
+            File.WriteAllText(configJsonFilePath, ConfigJsonFileContent);
+        }
+
+        // Create the skprompt.txt file if not exists
+        var skPromptFilePath = Path.Combine(pluginRelativeDirectory, "skprompt.txt");
+        if (!File.Exists(skPromptFilePath))
+        {
+            // Create the skprompt file with the content
+            File.WriteAllText(skPromptFilePath, SkPromptFileContent);
+        }
+    }
 }
