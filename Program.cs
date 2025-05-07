@@ -11,7 +11,7 @@ public class Program(string[] args)
     {
         // Inject your logger 
         // see Microsoft.Extensions.Logging.ILogger @ https://learn.microsoft.com/dotnet/core/extensions/logging
-        ILoggerFactory myLoggerFactory = NullLoggerFactory.Instance;
+        // ILoggerFactory myLoggerFactory = NullLoggerFactory.Instance;
 
         // Load configuration from secrets (for your Azure OpenAI keys)
         var configuration = new ConfigurationBuilder()
@@ -33,14 +33,24 @@ public class Program(string[] args)
 
         var funPlugin = kernel.ImportPluginFromPromptDirectory(funPluginDirectoryPath, "FunPlugin");
 
-                // Invoke the plugin with a prompt
-        var result = await kernel.InvokeAsync(funPlugin["Joke"], new()
+        // Start the chat loop
+        string? userInput;
+        do
         {
-            ["input"] = "Why did the chicken cross the road?",
-            ["style"] = "dad joke"
-        });
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.Write("User > ");
+            userInput = Console.ReadLine();
 
-        Console.WriteLine(result.GetValue<string>());
+            // Invoke the plugin with a prompt
+            var result = await kernel.InvokeAsync(funPlugin["Joke"], new()
+            {
+                ["input"] = userInput,
+                ["style"] = "dad joke"
+            });
+
+          Console.WriteLine(result.GetValue<string>());
+
+        } while (true);
     }
 
     private static void CreateFileBasedPluginTemplate(string pluginRootDirectory)
