@@ -9,23 +9,7 @@ public class Program(string[] args)
 {
     public static async Task Main(string[] args)
     {
-        // Inject your logger 
-        // see Microsoft.Extensions.Logging.ILogger @ https://learn.microsoft.com/dotnet/core/extensions/logging
-        // ILoggerFactory myLoggerFactory = NullLoggerFactory.Instance;
-
-        // Load configuration from secrets (for your Azure OpenAI keys)
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddUserSecrets<Program>()
-            .Build();
-
-        string? modelId = configuration["SemanticKernel:ModelId"];
-        string? endpoint = configuration["SemanticKernel:Endpoint"];
-        string? apiKey = configuration["SemanticKernel:ApiKey"];
-
-        var kernel = Kernel.CreateBuilder()
-            .AddAzureOpenAIChatCompletion(modelId, endpoint, apiKey)
-            .Build();
+        Kernel kernel = KernelHostBuilder.BuildKernel();
 
         var funPluginDirectoryPath = Path.Combine(AppContext.BaseDirectory, "Plugins", "FunPlugin");
 
@@ -48,10 +32,12 @@ public class Program(string[] args)
                 ["style"] = "dad joke"
             });
 
-          Console.WriteLine(result.GetValue<string>());
+            Console.WriteLine(result.GetValue<string>());
 
         } while (true);
     }
+
+    
 
     private static void CreateFileBasedPluginTemplate(string pluginRootDirectory)
     {
